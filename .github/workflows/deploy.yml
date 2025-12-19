@@ -89,15 +89,56 @@ jobs:
           memory: 2
           port: 8000
           wait-for-service-stability-seconds: 300
-          runtime-environment-variables: |
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            QDRANT_URL=${{ secrets.QDRANT_URL }}
-            QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
-            LOG_LEVEL=INFO
-            LANGSMITH_TRACING=true
-            LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}
-            LANGSMITH_PROJECT=rag-qa-production-system
-            LANGSMITH_ENDPOINT=https://eu.api.smith.langchain.com
+
+      - name: Update Environment Variables
+        run: |
+          # Get current service configuration
+          SERVICE_ARN=$(aws apprunner list-services --region ${{ env.AWS_REGION }} \
+            --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" \
+            --output text)
+
+          # Update service with environment variables
+          aws apprunner update-service \
+            --service-arn $SERVICE_ARN \
+            --region ${{ env.AWS_REGION }} \
+            --source-configuration '{
+              "ImageRepository": {
+                "ImageIdentifier": "${{ needs.build-and-push.outputs.image_uri }}",
+                "ImageRepositoryType": "ECR",
+                "ImageConfiguration": {
+                  "Port": "8000",
+                  "RuntimeEnvironmentVariables": {
+                    "OPENAI_API_KEY": "${{ secrets.OPENAI_API_KEY }}",
+                    "QDRANT_URL": "${{ secrets.QDRANT_URL }}",
+                    "QDRANT_API_KEY": "${{ secrets.QDRANT_API_KEY }}",
+                    "LOG_LEVEL": "INFO",
+                    "LANGSMITH_TRACING": "true",
+                    "LANGSMITH_API_KEY": "${{ secrets.LANGSMITH_API_KEY }}",
+                    "LANGSMITH_PROJECT": "rag-qa-production-system",
+                    "LANGSMITH_ENDPOINT": "https://eu.api.smith.langchain.com"
+                  }
+                }
+              },
+              "AutoDeploymentsEnabled": false,
+              "AuthenticationConfiguration": {
+                "AccessRoleArn": "${{ secrets.APP_RUNNER_ECR_ACCESS_ROLE_ARN }}"
+              }
+            }'
+
+          echo "✅ Environment variables updated"
+
+      - name: Wait for Service Update
+        run: |
+          SERVICE_ARN=$(aws apprunner list-services --region ${{ env.AWS_REGION }} \
+            --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE }}'].ServiceArn" \
+            --output text)
+
+          echo "Waiting for service to stabilize after environment update..."
+          aws apprunner wait service-stable \
+            --service-arn $SERVICE_ARN \
+            --region ${{ env.AWS_REGION }}
+
+          echo "✅ Service is stable"
 
       - name: Output App Runner URL
         run: |
