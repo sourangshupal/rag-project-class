@@ -15,7 +15,7 @@ A production-ready Retrieval-Augmented Generation (RAG) system built with FastAP
 
 ```bash
 # Install dependencies
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 
 # Set environment variables
 cp .env.example .env  # Configure your API keys
